@@ -1,4 +1,5 @@
 import type { Product } from '../types/product';
+import Image from 'next/image';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -27,9 +28,11 @@ export default function ProductCard({
   return (
     <article className="rounded-2xl border border-white/10 bg-slate-900 p-5">
       {imageSrc ? (
-        <img
+        <Image
           src={imageSrc}
           alt={product.name}
+          width={400}
+          height={300}
           className="mb-4 h-48 w-full rounded-xl object-cover"
         />
       ) : (
@@ -49,11 +52,11 @@ export default function ProductCard({
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
             product.isPublished
-              ? 'bg-emerald-500/10 text-emerald-300'
-              : 'bg-amber-500/10 text-amber-300'
+              ? "bg-emerald-500/10 text-emerald-300"
+              : "bg-amber-500/10 text-amber-300"
           }`}
         >
-          {product.isPublished ? 'Published' : 'Draft'}
+          {product.isPublished ? "Published" : "Draft"}
         </span>
       </div>
 
@@ -70,7 +73,11 @@ export default function ProductCard({
           onClick={() => onToggle(product)}
           className="rounded-lg border border-white/10 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
         >
-          {updating ? 'Updating...' : product.isPublished ? 'Unpublish' : 'Publish'}
+          {updating
+            ? "Updating..."
+            : product.isPublished
+              ? "Unpublish"
+              : "Publish"}
         </button>
 
         <button
@@ -79,7 +86,7 @@ export default function ProductCard({
           onClick={() => onDelete(product)}
           className="rounded-lg border border-red-500/20 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10 disabled:opacity-50"
         >
-          {deleting ? 'Deleting...' : 'Delete'}
+          {deleting ? "Deleting..." : "Delete"}
         </button>
       </div>
     </article>
