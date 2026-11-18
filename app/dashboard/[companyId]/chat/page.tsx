@@ -1,96 +1,97 @@
-
 'use client';
 
-import { useState } from 'react';
+import { Suspense } from 'react';
 import { useParams } from 'next/navigation';
 
-export default function ChatPage() {
+import { useChat } from './hooks/useChat';
+
+import ConversationList from './components/ConversationList';
+import ChatWindow from './components/ChatWindow';
+
+function ChatContent() {
   const { companyId } = useParams<{ companyId: string }>();
-  const [message, setMessage] = useState('');
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    // Messages cannot be sent until the backend chat API
-    // and WebSocket events are connected.
-    setMessage('');
-  }
+  const {
+    conversations,
+    selectedConversation,
+    messages,
+    loading,
+    messagesLoading,
+    sending,
+    connected,
+    typing,
+    error,
+    selectConversation,
+    sendMessage,
+    emitTyping,
+  } = useChat(companyId);
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <p className="text-sm font-semibold text-indigo-400">
-        CUSTOMER SUPPORT
-      </p>
+    <div className="mx-auto max-w-7xl text-white">
+      {/* Page header */}
+      <div className="mb-8">
+        <p className="text-sm font-semibold tracking-widest text-indigo-400">
+          CUSTOMER SUPPORT
+        </p>
 
-      <h1 className="mt-2 text-3xl font-bold">Live chat</h1>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold">Live chat</h1>
 
-      <p className="mt-2 text-slate-400">
-        Manage customer conversations in your company workspace.
-      </p>
-
-      <section className="mt-8 grid min-h-[520px] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 md:grid-cols-[280px_1fr]">
-        <aside className="border-b border-white/10 p-5 md:border-b-0 md:border-r">
-          <h2 className="font-semibold">Conversations</h2>
-
-          <div className="mt-5 rounded-xl border border-dashed border-white/15 p-4">
-            <p className="text-sm font-medium">No conversations loaded</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Conversations will appear here when the chat API is connected.
-            </p>
-          </div>
-        </aside>
-
-        <div className="flex min-w-0 flex-col">
-          <div className="border-b border-white/10 p-5">
-            <h2 className="font-semibold">Customer conversation</h2>
-            <p className="mt-1 text-xs text-slate-400">
-              Company: {companyId}
+            <p className="mt-2 text-sm text-slate-400">
+              Manage customer conversations in your workspace.
             </p>
           </div>
 
-          <div className="flex flex-1 items-center justify-center p-8 text-center">
-            <div className="max-w-sm">
-              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-indigo-500/10 text-2xl">
-                <span aria-hidden="true">✉</span>
-              </div>
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900 px-4 py-2 text-sm">
+            <span
+              className={`size-2 rounded-full ${
+                connected ? 'bg-emerald-400' : 'bg-red-400'
+              }`}
+            />
 
-              <h3 className="mt-4 text-lg font-semibold">
-                Your conversations will appear here
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                The interface is ready for integration. Real-time messaging
-                needs the backend conversation endpoints, WebSocket
-                authentication, and message events.
-              </p>
-            </div>
+            {connected ? 'Connected' : 'Disconnected'}
           </div>
-
-          <form
-            onSubmit={handleSubmit}
-            className="border-t border-white/10 p-4"
-          >
-            <div className="flex gap-3">
-              <input
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Chat is not connected yet..."
-                disabled
-                aria-label="Chat message"
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-              />
-
-              <button
-                type="submit"
-                disabled
-                className="rounded-xl bg-indigo-500 px-5 py-3 text-sm font-semibold opacity-50"
-              >
-                Send
-              </button>
-            </div>
-          </form>
         </div>
+      </div>
+
+      {/* Chat layout */}
+      <section className="grid min-h-[650px] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 md:grid-cols-[300px_1fr]">
+        <ConversationList
+          conversations={conversations}
+          selectedId={selectedConversation?.id || null}
+          loading={loading}
+          onSelect={selectConversation}
+        />
+
+        <ChatWindow
+          conversation={selectedConversation}
+          messages={messages}
+          loading={messagesLoading}
+          sending={sending}
+          typing={typing}
+          connected={connected}
+          error={error}
+          onSend={sendMessage}
+          onTyping={emitTyping}
+        />
       </section>
     </div>
   );
 }
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl p-6 text-slate-400">
+          Loading chat...
+        </div>
+      }
+    >
+      <ChatContent />
+    </Suspense>
+  );
+}
+
+

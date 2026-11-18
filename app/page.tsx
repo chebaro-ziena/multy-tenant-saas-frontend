@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "./components/Navbar";
 import ProductsSection from "./components/ProductsSection";
 import PlansSection from "./components/PlansSection";
+import CreateCompanyForm from "./components/CreateCompanyForm";
 import LoginForm from "./components/LoginForm";
 import RegisterForm from "./components/RegisterForm";
 
@@ -14,8 +15,27 @@ export default function HomePage() {
   const [authMode, setAuthMode] = useState<AuthMode>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    function openLogin() {
+      setAuthMode("login");
+    }
+
+    function openRegister() {
+      setAuthMode("register");
+    }
+
+    window.addEventListener("companyhub-open-login", openLogin);
+    window.addEventListener("companyhub-open-register", openRegister);
+
+    return () => {
+      window.removeEventListener("companyhub-open-login", openLogin);
+      window.removeEventListener("companyhub-open-register", openRegister);
+    };
+  }, []);
+
   function handleLoginSuccess() {
     setAuthMode(null);
+    window.dispatchEvent(new Event("companyhub-auth-changed"));
     router.refresh();
   }
 
@@ -51,6 +71,23 @@ export default function HomePage() {
         <div className="border-t border-gray-200">
           <PlansSection />
         </div>
+
+        <div id="my-company" className="border-t border-gray-200 py-12">
+          <div className="mb-8 text-center">
+            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">
+              Business workspace
+            </p>
+            <h2 className="mt-2 text-3xl font-bold text-gray-900">
+              Your Company
+            </h2>
+            <p className="mt-2 text-gray-600">
+              Create your company with an active Paid plan, then manage
+              your products and team from your dashboard.
+            </p>
+          </div>
+
+          <CreateCompanyForm />
+        </div>
       </div>
 
       {authMode && (
@@ -75,19 +112,15 @@ export default function HomePage() {
             </button>
 
             {authMode === "login" ? (
-              <>
-                <LoginForm
-                  onSuccess={handleLoginSuccess}
-                  onSwitchToRegister={() => setAuthMode("register")}
-                />
-              </>
+              <LoginForm
+                onSuccess={handleLoginSuccess}
+                onSwitchToRegister={() => setAuthMode("register")}
+              />
             ) : (
-              <>
-                <RegisterForm
-                  onSuccess={handleRegisterSuccess}
-                  onSwitchToLogin={() => setAuthMode("login")}
-                />
-              </>
+              <RegisterForm
+                onSuccess={handleRegisterSuccess}
+                onSwitchToLogin={() => setAuthMode("login")}
+              />
             )}
           </div>
         </div>

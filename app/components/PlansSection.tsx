@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
@@ -18,75 +17,109 @@ interface Subscription {
   id: string;
   plan: "FREE" | "PAID";
   status: "PENDING" | "ACTIVE" | "CANCELLED" | "EXPIRED";
+  companyId?: string | null;
 }
 
 export default function PlansSection() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] =
     useState<Subscription | null>(null);
+  const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
- 
+  const [paidCheckoutLoading, setPaidCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
   
-useEffect(() => {
-  let cancelled = false;
+  const loadData = useCallback(async () => {
+    setError("");
 
-  async function fetchPlans() {
     try {
-      const [plansResponse, subscriptionResponse] = await Promise.all([
-        fetch(`${API_URL}/subscriptions/plans`),
-        fetch(`${API_URL}/subscriptions/me`, {
-          credentials: "include",
-        }),
-      ]);
-
+      const plansResponse = await fetch(`${API_URL}/subscriptions/plans`);
       if (!plansResponse.ok) {
         throw new Error("Could not load subscription plans.");
       }
 
-      if (!subscriptionResponse.ok) {
-        throw new Error(
-          "Could not load your subscription. Please log in again.",
-        );
-      }
-
       const plansData = await plansResponse.json();
-      const subscriptionData = await subscriptionResponse.json();
-
-      if (cancelled) return;
-
       setPlans(
         Array.isArray(plansData) ? plansData : plansData.plans ?? [],
       );
 
+      const authResponse = await fetch(`${API_URL}/auth/me`, {
+        credentials: "include",
+      });
+
+      if (!authResponse.ok) {
+        setLoggedIn(false);
+        setSubscription(null);
+        return;
+      }
+
+      setLoggedIn(true);
+
+      const subscriptionResponse = await fetch(
+        `${API_URL}/subscriptions/me`,
+        { credentials: "include" },
+      );
+
+      if (!subscriptionResponse.ok) {
+        throw new Error("Could not load your subscription.");
+      }
+
+      const subscriptionData = await subscriptionResponse.json();
       setSubscription(subscriptionData.subscription ?? null);
     } catch (err) {
-      if (cancelled) return;
-
       setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong.",
+        err instanceof Error ? err.message : "Something went wrong.",
       );
     } finally {
-      if (!cancelled) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }
+  }, []);
 
-  void fetchPlans();
+  
+
+useEffect(() => {
+  let cancelled = false;
+
+  const refreshPlans = () => {
+    if (!cancelled) {
+      void loadData();
+    }
+  };
+
+  // Defer the initial load so it doesn't synchronously trigger
+  // state updates during the effect.
+  void Promise.resolve().then(() => {
+    if (!cancelled) {
+      void loadData();
+    }
+  });
+
+  window.addEventListener("companyhub-auth-changed", refreshPlans);
+  window.addEventListener(
+    "companyhub-subscription-changed",
+    refreshPlans,
+  );
 
   return () => {
     cancelled = true;
+    window.removeEventListener("companyhub-auth-changed", refreshPlans);
+    window.removeEventListener(
+      "companyhub-subscription-changed",
+      refreshPlans,
+    );
   };
-}, []);
+}, [loadData]);
 
 
   async function activateFreePlan() {
+    if (!loggedIn) {
+      window.dispatchEvent(new Event("companyhub-open-login"));
+      return;
+    }
+
     setActivating(true);
     setError("");
     setMessage("");
@@ -97,16 +130,23 @@ useEffect(() => {
         credentials: "include",
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        const details = data.message;
         throw new Error(
-          data.message || "Could not activate the Free plan.",
+          Array.isArray(details)
+            ? details.join(" ")
+            : details || "Could not activate the Free plan.",
         );
       }
 
-      setSubscription(data.subscription);
-      setMessage("Your Free plan is now active!");
+      setMessage("Your Free plan is active.");
+      await loadData();
+
+      window.dispatchEvent(
+        new Event("companyhub-subscription-changed"),
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Something went wrong.",
@@ -115,6 +155,45 @@ useEffect(() => {
       setActivating(false);
     }
   }
+  
+async function startPaidCheckout() {
+  setPaidCheckoutLoading(true);
+  setCheckoutError("");
+
+  try {
+    const response = await fetch(
+      `${API_URL}/subscriptions/checkout`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        typeof data.message === "string"
+          ? data.message
+          : "Could not start checkout.",
+      );
+    }
+
+    if (typeof data.url !== "string") {
+      throw new Error("Stripe did not return a checkout URL.");
+    }
+
+    window.location.assign(data.url);
+  } catch (error) {
+    setCheckoutError(
+      error instanceof Error
+        ? error.message
+        : "Checkout failed.",
+    );
+  } finally {
+    setPaidCheckoutLoading(false);
+  }
+}
 
   if (loading) {
     return (
@@ -123,6 +202,8 @@ useEffect(() => {
       </section>
     );
   }
+
+  const currentPlanIsActive = subscription?.status === "ACTIVE";
 
   return (
     <section id="plans" className="scroll-mt-24 py-12">
@@ -134,7 +215,7 @@ useEffect(() => {
           Choose Your Plan
         </h2>
         <p className="mt-2 text-gray-600">
-          Start free, then upgrade when your business grows.
+          Start with Free or upgrade when you&apos;re ready to build your business.
         </p>
       </div>
 
@@ -150,10 +231,9 @@ useEffect(() => {
         </p>
       )}
 
-      {subscription?.status === "ACTIVE" && (
+      {loggedIn && currentPlanIsActive && (
         <p className="mb-6 text-center text-gray-700">
-          Your current plan:{" "}
-          <strong>{subscription.plan}</strong>
+          Your current plan: <strong>{subscription?.plan}</strong>
         </p>
       )}
 
@@ -167,17 +247,15 @@ useEffect(() => {
           return (
             <article
               key={plan.id}
-              className={`relative rounded-2xl border bg-white p-7 shadow-sm ${
+              className={`rounded-2xl border bg-white p-7 shadow-sm ${
                 isFree
                   ? "border-indigo-500 ring-2 ring-indigo-100"
                   : "border-gray-200"
               }`}
             >
-              {isFree && (
-                <span className="mb-4 inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
-                  Recommended to start
-                </span>
-              )}
+              <span className="mb-4 inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                {isFree ? "Start here" : "For growing businesses"}
+              </span>
 
               <h3 className="text-2xl font-bold text-gray-900">
                 {plan.name}
@@ -185,7 +263,7 @@ useEffect(() => {
 
               <p className="mt-4 text-4xl font-bold text-gray-900">
                 {plan.price === null
-                  ? "Custom"
+                  ? "Contact us"
                   : plan.price === 0
                     ? "Free"
                     : `${plan.currency} ${plan.price}`}
@@ -193,18 +271,16 @@ useEffect(() => {
 
               <ul className="my-6 space-y-3">
                 {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex gap-2 text-sm text-gray-600"
-                  >
+                  <li key={feature} className="flex gap-2 text-sm text-gray-600">
                     <span className="text-green-600">✓</span>
-                    {feature}
+                    <span>{feature}</span>
                   </li>
                 ))}
               </ul>
 
               {isCurrent ? (
                 <button
+                  type="button"
                   disabled
                   className="w-full rounded-lg bg-gray-100 px-4 py-3 font-semibold text-gray-500"
                 >
@@ -212,20 +288,28 @@ useEffect(() => {
                 </button>
               ) : isFree ? (
                 <button
-                  onClick={activateFreePlan}
+                  type="button"
+                  onClick={() => void activateFreePlan()}
                   disabled={activating}
                   className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {activating ? "Activating..." : "Get Started"}
+                  {activating
+                    ? "Activating..."
+                    : loggedIn
+                      ? "Choose Free"
+                      : "Log in to choose Free"}
                 </button>
               ) : (
                 <button
-                  disabled
-                  className="w-full cursor-not-allowed rounded-lg bg-gray-100 px-4 py-3 font-semibold text-gray-500"
-                  title="Paid checkout has not been implemented yet"
-                >
-                  Paid plan coming soon
-                </button>
+  type="button"
+  onClick={startPaidCheckout}
+  disabled={paidCheckoutLoading}
+>
+  {paidCheckoutLoading
+    ? "Redirecting to Stripe..."
+    : "Subscribe — $20/month"}
+</button>
+
               )}
             </article>
           );
@@ -234,3 +318,7 @@ useEffect(() => {
     </section>
   );
 }
+
+
+
+

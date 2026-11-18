@@ -1,35 +1,39 @@
-
 'use client';
 
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { useParams } from 'next/navigation';
 
-export default function CompanyOverviewPage() {
+function CompanyId() {
   const { companyId } = useParams<{ companyId: string }>();
 
+  return <>{companyId}</>;
+}
+
+export default function CompanyOverviewPage() {
   const cards = [
     {
       title: 'Products',
       description: 'Manage your catalog and publish products for customers.',
-      href: `/dashboard/${companyId}/products`,
+      href: './products',
       action: 'Manage products',
     },
     {
       title: 'Team members',
       description: 'View the people who belong to your company.',
-      href: `/dashboard/${companyId}/team`,
+      href: './team',
       action: 'View team',
     },
     {
       title: 'Customer chat',
       description: 'Create a place for customers to contact your team.',
-      href: `/dashboard/${companyId}/chat`,
+      href: './chat',
       action: 'Open chat',
     },
     {
       title: 'Subscription',
       description: 'Review your current plan and available plans.',
-      href: `/dashboard/${companyId}/subscription`,
+      href: './subscription',
       action: 'View plans',
     },
   ];
@@ -58,7 +62,9 @@ export default function CompanyOverviewPage() {
       <div className="mt-8 rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 to-slate-900 p-6 sm:p-8">
         <p className="text-sm text-slate-400">Company ID</p>
         <p className="mt-2 break-all font-mono text-sm text-slate-200">
-          {companyId}
+          <Suspense fallback={<span>Loading workspace...</span>}>
+            <CompanyId />
+          </Suspense>
         </p>
         <p className="mt-4 text-sm text-slate-400">
           This workspace is identified by its company ID. Company details
@@ -88,4 +94,5 @@ export default function CompanyOverviewPage() {
     </div>
   );
 }
+
 
